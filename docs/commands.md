@@ -22,6 +22,9 @@
 | `--judge-fail-closed` | block suspicious calls when the judge errors or gives no verdict (default: allow and log) |
 | `--journal PATH` | where flagged calls are kept (default `~/.safeagents/calls.jsonl`) |
 | `--no-journal` | keep no record of them |
+| `--dlp` | mask secrets in requests with gitleaks' rules, before they reach the model provider |
+| `--dlp-rules PATH` | gitleaks config to load the rules from (default: the bundled one) |
+| `--injection-check` | refuse input the judge calls a prompt injection (needs `--judge-url`) |
 
 The built-in host allowlist covers loopback, GitHub, PyPI, Hugging Face, npm and crates.io.
 

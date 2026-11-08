@@ -22,6 +22,7 @@ Completions and Anthropic Messages, full JSON responses and event streams.
 from .constants import DEFAULT_ALLOWED_HOSTS
 from .guard import Blocked, Config, Guard, Review, analyze, analyze_sync
 from .policy import Policy, declared_tools, extract_hosts
+from .preflight import Preflight, Rules
 from .scan import Scanner, load_plugin
 from .scrub import Finding, Scrubber
 
@@ -32,7 +33,9 @@ __all__ = [
     "Finding",
     "Guard",
     "Policy",
+    "Preflight",
     "Review",
+    "Rules",
     "Scanner",
     "Scrubber",
     "analyze",

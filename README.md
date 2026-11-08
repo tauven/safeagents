@@ -50,6 +50,18 @@ The judge only sees what the user wrote, the tool call and the findings, never t
 
 Streaming adds no latency: each tool call is held until its arguments are complete (harnesses only run complete calls), then released byte for byte or replaced. Text is forwarded as it arrives. atif-scan costs about 10 to 20 ms per call on an M-series Mac.
 
+## Pre-flight checks
+
+Two optional checks run on the request before it reaches the model provider:
+
+`--dlp` masks secrets anywhere in the payload with [gitleaks](https://github.com/gitleaks/gitleaks) rules (the bundled `gitleaks.toml`), so an API key an agent printed or pasted into a prompt never leaves for OpenAI or Anthropic. Only the secret itself is replaced (`[REDACTED_GITHUB_PAT]`), placeholders like `${GITHUB_TOKEN}` and the well-known example credentials stay as they are. `--dlp-rules PATH` loads a different gitleaks config.
+
+`--injection-check` sends the newest input, the user's message or the last tool results, to the judge (`--judge-url`, `--judge-model`), and answers the request with a `403` when it calls it a prompt injection. Nothing goes upstream in that case. Inputs under 50 characters are skipped, older turns were checked when they arrived, and `--judge-fail-closed` refuses input when the judge can't be reached. `--log-only` reports injections instead of refusing them; secrets are masked either way.
+
+```
+safeagents start https://api.anthropic.com --dlp --injection-check --judge-url http://localhost:8080/v1
+```
+
 ## Plugins
 
 `--plugin MODULE:FACTORY` (or `path/to/file.py:FACTORY`) adds your own [atif-scan](https://github.com/huggingface/atif-scan) checks, with the same convention as atif-scan's `--plugin`: `FACTORY()` returns a list of detectors, rules and allowances. Detectors and rules at or above `--block-severity` block, like the built-in ones. An allowance excuses the findings of the checks it covers, for a task that legitimately does what a check flags. `--allow-host` adds hosts calls may reach.

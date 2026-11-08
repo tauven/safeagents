@@ -33,6 +33,7 @@ from .journal import Journal
 from .judge import Judge, JudgeError, task_text
 from .monitor import Monitor
 from .policy import Policy
+from .preflight import Preflight
 from .scan import Scanner, Signal, history, recent
 from .utils import compact_json
 
@@ -55,6 +56,8 @@ class Config:
     monitor: Monitor | None = None
     # Keeps calls that weren't simply passed, for `safeagents inspect`.
     journal: Journal | None = None
+    # Masks secrets in requests and checks the newest input for prompt injection.
+    preflight: Preflight | None = None
 
 
 @dataclass(frozen=True)

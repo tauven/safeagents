@@ -24,7 +24,7 @@ import httpx
 from starlette.applications import Starlette
 from starlette.background import BackgroundTask
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response, StreamingResponse
+from starlette.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from .constants import METHODS, SKIP_REQUEST, SKIP_RESPONSE
@@ -52,9 +52,22 @@ def create_app(upstream: str, config: Config, transport: httpx.AsyncBaseTranspor
         # Only JSON object bodies are model calls worth guarding.
         guard = None
         if isinstance(request_json, dict):
-            guard = Guard(request_json, config)
             # `count_tokens` also carries `messages` but doesn't produce a model turn.
             is_model_turn = "messages" in request_json and not request.url.path.endswith("/count_tokens")
+            # Pre-flight: the request is checked before it leaves, so an injected input
+            # or a secret in it never reaches the model provider.
+            if config.preflight is not None and is_model_turn:
+                safe, refusal = await config.preflight.check(request_json)
+                if refusal is not None:
+                    logger.warning("[safeagents] refused request: %s", refusal)
+                    return JSONResponse(
+                        {"error": {"type": "safeagents_preflight", "message": f"safeagents: {refusal}"}},
+                        status_code=403,
+                    )
+                if safe is not request_json:
+                    request_json = safe
+                    body = compact_json(safe).encode()
+            guard = Guard(request_json, config)
             # here we increment the counter of the number of requests from the model
             # it is activated only when monitor is turned on
             if config.monitor and is_model_turn:

@@ -81,6 +81,21 @@ class Judge:
         self.timeout = timeout
         self.client = client or httpx.AsyncClient()
 
+    async def ask(self, system: str, user: str, max_tokens: int = 8) -> str:
+        """The model's plain answer to one prompt, for checks outside tool review."""
+        body = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "temperature": 0,
+            "max_tokens": max_tokens,
+        }
+        try:
+            response = await self.client.post(self.url, json=body, headers=self.headers, timeout=self.timeout)
+            response.raise_for_status()
+            return str(response.json()["choices"][0]["message"]["content"] or "")
+        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as e:
+            raise JudgeError(f"{type(e).__name__}: {e}") from e
+
     async def review(self, request: dict, name: str, args: str, signals: list[Signal]) -> tuple[bool, str]:
         """(block, reason) for one call. Raises JudgeError if no usable verdict comes back."""
         body = {

@@ -110,7 +110,23 @@ def main(argv: list[str] | None = None) -> None:
     judge_group.add_argument(
         "--judge-fail-closed", action="store_true", help="block suspicious calls when the judge fails"
     )
+    preflight_group = parser.add_argument_group(
+        "pre-flight", "Checks the request on its way out, before the model provider sees it."
+    )
+    preflight_group.add_argument("--dlp", action="store_true", help="mask secrets in requests with gitleaks' rules")
+    preflight_group.add_argument(
+        "--dlp-rules", metavar="PATH", help="gitleaks config to load the rules from (default: the bundled one)"
+    )
+    preflight_group.add_argument(
+        "--injection-check",
+        action="store_true",
+        help="refuse input the judge calls a prompt injection (needs --judge-url)",
+    )
     args = parser.parse_args(argv)
+    if args.dlp_rules:
+        args.dlp = True
+    if args.injection_check and not args.judge_url:
+        parser.error("--injection-check needs --judge-url")
 
     logging.basicConfig(format="%(message)s")
     logger = logging.getLogger("safeagents")
@@ -121,6 +137,7 @@ def main(argv: list[str] | None = None) -> None:
 
     from .judge import Judge
     from .monitor import Monitor
+    from .preflight import Preflight, Rules
     from .proxy import create_app
     from .scan import Scanner, load_plugin
 
@@ -131,6 +148,18 @@ def main(argv: list[str] | None = None) -> None:
     if args.judge_url:
         api_key = os.environ.get(JUDGE_API_KEY_ENV)
         judge = Judge(args.judge_url, args.judge_model, api_key, args.judge_timeout)
+    preflight = None
+    if args.dlp or args.injection_check:
+        rules = None
+        if args.dlp:
+            rules = Rules(Path(args.dlp_rules).expanduser() if args.dlp_rules else None)
+            logger.info("[safeagents] dlp: %d rules from %s", len(rules.rules), rules.path)
+        preflight = Preflight(
+            rules=rules,
+            judge=judge if args.injection_check else None,
+            block=not args.log_only,
+            fail_closed=args.judge_fail_closed,
+        )
     config = Config(
         block=not args.log_only,
         allowed_hosts=[*DEFAULT_ALLOWED_HOSTS, *args.allow_host],
@@ -139,6 +168,7 @@ def main(argv: list[str] | None = None) -> None:
         judge=judge,
         judge_fail_closed=args.judge_fail_closed,
         journal=None if args.no_journal else Journal(Path(args.journal).expanduser()),
+        preflight=preflight,
     )
 
     host, _, port = args.listen.rpartition(":")
@@ -147,6 +177,8 @@ def main(argv: list[str] | None = None) -> None:
         setup_parts.append("atif-scan" + "".join(f" + {plugin}" for plugin in args.plugin))
     if config.judge:
         setup_parts.append(f"judge {args.judge_url}")
+    if config.preflight:
+        setup_parts.extend(name for name, on in (("dlp", args.dlp), ("injection-check", args.injection_check)) if on)
     if config.journal:
         setup_parts.append(f"journal {config.journal.path}")
     setup = ", ".join(setup_parts)
